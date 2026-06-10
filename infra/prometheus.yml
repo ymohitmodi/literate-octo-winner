@@ -1,0 +1,7 @@
+# Prometheus scrapes the /metrics endpoint each worker exposes.
+global:
+  scrape_interval: 5s
+scrape_configs:
+  - job_name: mythos
+    static_configs:
+      - targets: ['worker1:8000', 'worker2:8000']
