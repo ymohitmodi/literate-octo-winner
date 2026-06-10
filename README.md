@@ -1,6 +1,6 @@
-# Mythos — a scaled-down frontier-model lifecycle you can run on a CPU
+# Lyceum — a scaled-down frontier-model lifecycle you can run on a CPU
 
-Mythos is a **functional, end-to-end** miniature of how a modern frontier
+Lyceum is a **functional, end-to-end** miniature of how a modern frontier
 language model is built, trained, aligned, served, secured, and operated —
 shrunk so the entire pipeline runs on a **CPU-only mini PC** (10–16 GB RAM, no
 GPU). It is a teaching system: every component is the *same mechanism* a
@@ -14,9 +14,17 @@ them (see [`docs/MANUAL_MAPPING.md`](docs/MANUAL_MAPPING.md)):
 2. **The AI Platform Security Field Manual** — lifecycle attacks & defenses.
 3. **The System Design Field Manual** — distributed cloud & AI infrastructure.
 
-> The Frontier manual's running codename for the model is **"Mythos"**, so that
-> is what this project trains. Nothing here chases frontier *scale*; it mirrors
-> the frontier *mechanisms and lifecycle*.
+> **Naming & disclaimer.** The Frontier Model Field Manual uses the teaching
+> codename **"Mythos"** for the hypothetical model it builds chapter by chapter.
+> This project is named **Lyceum** (after Aristotle's school) to make clear it is
+> an independent educational work, not that codename. Lyceum is **a
+> first-principles reconstruction that simulates, from an understanding of each
+> individual component, how such a frontier model *could plausibly* be built,
+> trained, and operated.** It is an *understanding* exercise — **not an
+> assurance, claim, or reverse-engineering of how any real frontier system
+> (Mythos, Claude, or otherwise) actually works.** Nothing here chases frontier
+> *scale*; it mirrors the frontier *mechanisms and lifecycle*. See
+> [`DISCLAIMER.md`](DISCLAIMER.md).
 
 ---
 
@@ -41,24 +49,46 @@ them (see [`docs/MANUAL_MAPPING.md`](docs/MANUAL_MAPPING.md)):
 
 ## Hardware & install
 
-Designed for Windows 11 mini PCs and equivalents: **no GPU, 10–16 GB RAM,
-~a few GB disk** for the default preset.
+Runs on a **CPU-only mini PC** (no GPU, 10–16 GB RAM, a few GB disk) for the
+default preset, and **automatically lights up GPU-only features when a CUDA GPU
+(or Apple MPS) is present** — otherwise it warns once and falls back to the
+CPU path. Check what your machine enables:
 
 ```bash
-# 1. install the CPU build of PyTorch (avoids huge CUDA downloads)
+python -m lyceum.cli doctor
+```
+
+```bash
+# CPU-only machine: install the CPU build of PyTorch (no CUDA download)
 pip install torch --index-url https://download.pytorch.org/whl/cpu
-# 2. install the rest
+# GPU machine: install the normal CUDA build instead
+#   pip install torch
 pip install -r requirements.txt
 ```
+
+### What auto-detection turns on
+
+`lyceum/hardware.py` detects the device and enables features accordingly. Every
+GPU-only feature checks a flag and **falls back gracefully with a warning** when
+absent, so the same commands work everywhere.
+
+| Feature | CPU-only | CUDA GPU |
+|---|---|---|
+| Full lifecycle (data→train→align→serve→eval) | ✅ real | ✅ real |
+| Mixed precision (AMP, bf16/fp16) + `torch.compile` | ⛔ off (fp32) | ✅ on |
+| FlashAttention kernels (via SDPA) | ⛔ math kernel | ✅ on (Ampere+) |
+| Multi-GPU DDP/FSDP | ⛔ simulated plan | ✅ on (>1 GPU) |
+| int8 quantization / paged KV / speculative decoding | ✅ works (modest CPU gain) | ✅ on |
+| GRPO/RLVR, reward model + PPO-lite, DP-SGD, SAE interp, scaling ladder | ✅ runs (tiny) | ✅ faster/larger |
 
 ## Quickstart — the whole lifecycle in one command
 
 ```bash
 # nano preset: trains in ~1-2 minutes, proves every stage works end to end
-python -m mythos.cli all --preset nano
+python -m lyceum.cli all --preset nano
 
 # then serve it
-python -m mythos.cli serve --preset nano
+python -m lyceum.cli serve --preset nano
 #   GET  http://127.0.0.1:8000/healthz
 #   GET  http://127.0.0.1:8000/metrics
 #   POST http://127.0.0.1:8000/generate   (needs the X-API-Key it prints)
@@ -67,13 +97,13 @@ python -m mythos.cli serve --preset nano
 Run stages individually (same `--preset` everywhere):
 
 ```bash
-python -m mythos.cli data       # build corpus, curate, train tokenizer, write AI-BOM
-python -m mythos.cli pretrain    # self-supervised pretraining (checkpointed + signed)
-python -m mythos.cli align       # SFT then DPO
-python -m mythos.cli eval        # capability + red-team + ship-gate decision
-python -m mythos.cli security    # narrated attack -> defense walkthrough
-python -m mythos.cli agent       # ReAct agent + indirect-injection defense
-python -m mythos.cli chat        # interactive generation
+python -m lyceum.cli data       # build corpus, curate, train tokenizer, write AI-BOM
+python -m lyceum.cli pretrain    # self-supervised pretraining (checkpointed + signed)
+python -m lyceum.cli align       # SFT then DPO
+python -m lyceum.cli eval        # capability + red-team + ship-gate decision
+python -m lyceum.cli security    # narrated attack -> defense walkthrough
+python -m lyceum.cli agent       # ReAct agent + indirect-injection defense
+python -m lyceum.cli chat        # interactive generation
 ```
 
 ## Scaling to your machine
@@ -84,13 +114,17 @@ changing one flag. `--preset auto` picks a preset from your available RAM.
 | preset | params (approx) | use |
 |---|---|---|
 | `nano` | ~0.8 M | smoke test; trains in ~1-2 min |
-| `tiny` | ~3-8 M | **default** for a 10-16 GB mini PC |
+| `tiny` | ~3-8 M | **default** for a 10-16 GB CPU mini PC |
 | `small` | larger + MoE | a 16 GB+ machine willing to wait |
+| `xl` | bigger + MoE | a CUDA GPU (auto-selected ≥8–24 GB VRAM); enables AMP, compile, distributed, quantized+paged+speculative serving |
+
+`--preset auto` picks `nano`/`tiny`/`small` from your RAM, or `small`/`xl` from
+your GPU VRAM.
 
 You can also point `--preset` at a saved JSON config (`artifacts/config.json` is
 written on every run) and edit any field — `dim`, `n_layers`, `n_experts`,
 `max_seq_len`, training steps, security toggles, serving limits, etc. See
-[`mythos/config.py`](mythos/config.py).
+[`lyceum/config.py`](lyceum/config.py).
 
 ## Tests
 
@@ -101,7 +135,7 @@ pytest -q        # ~30s: tokenizer, training, signing, guards, gateway, RAG, mem
 ## Optional: the distributed serving stack
 
 ```bash
-python -m mythos.cli all --preset tiny     # produce ./artifacts
+python -m lyceum.cli all --preset tiny     # produce ./artifacts
 docker compose up --build                  # nginx + 2 workers + Prometheus + Grafana
 curl localhost:8080/healthz                # through the load balancer
 # Grafana at localhost:3000, Prometheus at localhost:9090
@@ -113,15 +147,35 @@ curl localhost:8080/healthz                # through the load balancer
 - [`docs/MANUAL_MAPPING.md`](docs/MANUAL_MAPPING.md) — every feature mapped to its field-manual source, including what is **simulated** vs **real** at this scale.
 - [`docs/SECURITY.md`](docs/SECURITY.md) — the attack/defense catalog and how to run each demo.
 
-## What is real vs simulated at this scale
+## Advanced features (all implemented, GPU-aware)
 
-Mythos is honest about its scale. Mechanisms like KV cache, GQA, MoE routing,
-DPO, RAG, the tool gateway, signing, and the audit chain are **real and
-functional**. Things that fundamentally need a cluster or GPUs — N-D
-parallelism, ZeRO/FSDP, paged-attention's hardware win, prefill/decode
-disaggregation, real autoscaling — are **simulated or documented** so the
-lifecycle is complete without misleading you. Each is labeled in
-`docs/MANUAL_MAPPING.md`.
+Beyond the core lifecycle, these run on CPU (tiny scale) and accelerate/scale up
+on a GPU:
+
+```bash
+python -m lyceum.cli grpo       # RLVR reasoning with GRPO on a verifiable task
+python -m lyceum.cli interpret  # train a sparse autoencoder + activation steering
+python -m lyceum.cli scaling    # train a ladder of models and fit a scaling law
+```
+
+Plus, as importable modules wired into config/serving: int8 **quantization**
+(`inference/quantize.py`), **speculative decoding** (`inference/speculative.py`),
+**paged KV cache** (`inference/paged_kv.py`), **continuous batching**
+(`serving/batching.py`), **reward model + PPO-lite RLHF** (`train/reward.py`),
+**Constitutional AI** critique-revise (`train/constitutional.py`), **DP-SGD**
+privacy (`train/dp_sgd.py`), **DDP/FSDP + N-D parallelism plan**
+(`train/distributed.py`), and **hybrid BM25+vector retrieval**
+(`memory/hybrid.py`).
+
+## What is real vs simulated
+
+Lyceum is honest about scale. Mechanisms like KV cache, GQA, MoE routing, DPO,
+GRPO, RAG, quantization, speculative decoding, the tool gateway, signing, and the
+audit chain are **real and functional**. Genuinely cluster-scale concerns — real
+multi-node N-D parallelism, datacenter networking, prefill/decode disaggregation —
+are **enabled where the hardware allows (DDP/FSDP on multi-GPU) and otherwise
+explained via a simulated plan** so the lifecycle is complete without misleading
+you. Each item is labeled in `docs/MANUAL_MAPPING.md`.
 
 ## License
 

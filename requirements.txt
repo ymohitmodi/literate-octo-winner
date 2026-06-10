@@ -1,4 +1,4 @@
-# Mythos runs CPU-only. On a machine without a GPU, install the CPU build of
+# Lyceum runs CPU-only. On a machine without a GPU, install the CPU build of
 # torch first to avoid pulling CUDA wheels:
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu
 torch>=2.2

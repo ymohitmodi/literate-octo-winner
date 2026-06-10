@@ -2,6 +2,6 @@
 global:
   scrape_interval: 5s
 scrape_configs:
-  - job_name: mythos
+  - job_name: lyceum
     static_configs:
       - targets: ['worker1:8000', 'worker2:8000']

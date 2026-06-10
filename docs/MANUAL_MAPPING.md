@@ -1,6 +1,6 @@
 # Feature → field-manual mapping
 
-Every Mythos feature traces to one of the three field manuals. The **Fidelity**
+Every Lyceum feature traces to one of the three field manuals. The **Fidelity**
 column is honest about scale: **real** = the actual mechanism, functional at
 tiny scale; **partial** = a reduced form that shows the mechanism but not the
 frontier-scale benefit; **simulated/doc** = can't truly run on one CPU, so it is
@@ -8,7 +8,7 @@ demonstrated as a mock or documented.
 
 ## A. Frontier Model Field Manual
 
-| Concept | Where in Mythos | Fidelity |
+| Concept | Where in Lyceum | Fidelity |
 |---|---|---|
 | Seven-stage lifecycle / flywheel | repo structure + `cli.py all` | real |
 | Compute estimate `C ≈ 6·N·D` | printed by `train/pretrain.py` | real |
@@ -32,29 +32,31 @@ demonstrated as a mock or documented.
 | Checkpointing (frequent, verified) | `train/checkpoint.py` | real |
 | Perplexity / bits-per-token metric | `train/pretrain._record` | real |
 | Run monitoring / logging | `pretrain.log`, `serving/metrics.py` | real |
-| Scaling-law ladder | tweak presets + read `best_loss` | partial |
+| Scaling-law ladder (fit power law) | `eval/scaling_laws.py` (`cli scaling`) | real |
 | SFT + chat template + instruction hierarchy | `train/sft.py`, `memory/context.py` | real |
 | **DPO** (no reward model) | `train/dpo.py` | real |
 | Refusals / HHH behavior | preference data in `data/corpus.py` | partial |
-| RLHF / PPO / reward model | not built (DPO chosen for CPU) | doc |
-| Constitutional AI / critique-revise | read-only policy store in `memory/rag.MemoryStore` | partial |
-| RLVR / GRPO reasoning | not built | doc |
+| RLHF: reward model + PPO-lite | `train/reward.py` | real (toy) |
+| Constitutional AI / critique-revise | `train/constitutional.py` + read-only policy store | real (toy) |
+| RLVR / GRPO reasoning (verifiable reward) | `train/grpo.py` (`cli grpo`) | real (toy) |
 | Chain-of-thought / test-time compute | self-consistency, best-of-N in `inference/engine.py` | real |
 | Prefill vs decode | `inference/engine.stream` | real |
 | **KV cache** | `model/transformer.KVCache` | real |
 | Sampling: temp/top-k/top-p/rep-penalty | `inference/engine._sample` | real |
 | Streaming generation | `inference/engine.stream`, `/stream` SSE | real |
-| Continuous/static batching | `inference/engine.batch_generate` | partial (static) |
-| Quantization / speculative decoding | not built | doc |
+| Static + continuous (in-flight) batching | `inference/engine.batch_generate`, `serving/batching.py` | real |
+| Quantization (int8) + speculative decoding | `inference/quantize.py`, `inference/speculative.py` | real |
 | Evaluation portfolio + ship gate | `eval/harness.py` | real |
 | Red-teaming + regression suite | `eval/harness.red_team_suite` | real |
-| N-D parallelism, ZeRO/FSDP | — | simulated/doc |
-| Mechanistic interpretability / SAEs | — | doc |
+| Mixed precision (AMP) + torch.compile | `train/pretrain.py` (auto-gated to GPU) | real (GPU) |
+| Paged KV-cache allocator | `inference/paged_kv.py` | real |
+| Multi-GPU DDP/FSDP + N-D parallelism plan | `train/distributed.py` (real on >1 GPU, else simulated plan) | real / simulated |
+| Mechanistic interpretability: SAE + steering | `interpretability/sae.py` (`cli interpret`) | real (toy) |
 | RSP / if-then capability gates | ship gate logic in `eval/harness.py` | partial |
 
 ## B. AI Platform Security Field Manual
 
-| Attack / Defense | Where in Mythos | Fidelity |
+| Attack / Defense | Where in Lyceum | Fidelity |
 |---|---|---|
 | Data poisoning / **backdoor trigger** | `security/attacks.inject_backdoor`, `trigger_aware_eval` | real |
 | Trust tiering / provenance | `data/curation.py`, `memory/rag.Chunk.trust` | real |
@@ -84,11 +86,12 @@ demonstrated as a mock or documented.
 | Auth / own identity / JIT tokens | `security/auth.py` | real |
 | **Tamper-evident hash-chained audit log** | `security/audit.py` | real |
 | MITRE ATLAS tagging | `eval/harness.RED_TEAM_CASES` | real |
-| DP-SGD, embedding inversion, Morris II, SSRF | — | doc/simulated |
+| **DP-SGD** (differential privacy) | `train/dp_sgd.py` | real (toy) |
+| Embedding inversion, Morris II, SSRF | — | doc/simulated |
 
 ## C. System Design Field Manual
 
-| Concept | Where in Mythos | Fidelity |
+| Concept | Where in Lyceum | Fidelity |
 |---|---|---|
 | Stateless workers / shared-nothing | `serving/server.py` + compose workers | real |
 | API gateway + **L7 load balancing** | `infra/nginx.conf` (least-conn) | real |
@@ -108,10 +111,10 @@ demonstrated as a mock or documented.
 | **RAG ingestion + retrieval** | `memory/rag.py` | real |
 | Vector DB / ANN | `memory/rag.VectorStore` (brute-force cosine) | partial |
 | Per-tenant authz at retrieval | `memory/rag.VectorStore.search(tenant=...)` | real |
-| Hybrid (vector + keyword) retrieval | — | doc |
+| Hybrid (vector + BM25) retrieval, RRF fusion | `memory/hybrid.py` | real |
 | Containerization / compose orchestration | `Dockerfile`, `docker-compose.yml` | real |
 | Canary / shadow deploys, autoscaling | — | doc |
 | Consistent hashing, CDC/outbox, sagas | — | doc |
 
-If you want to extend Mythos, the `doc`-only rows are the natural next exercises
+If you want to extend Lyceum, the `doc`-only rows are the natural next exercises
 — each manual section above tells you exactly what the production version adds.

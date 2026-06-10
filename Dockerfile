@@ -1,4 +1,4 @@
-# CPU-only image for the Mythos inference server.
+# CPU-only image for the Lyceum inference server.
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -18,4 +18,4 @@ HEALTHCHECK --interval=15s --timeout=3s --retries=5 \
   CMD python -c "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/healthz')" || exit 1
 
 # bind to 0.0.0.0 inside the container so the gateway can reach it
-CMD ["uvicorn", "mythos.serving.server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "lyceum.serving.server:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -3,8 +3,8 @@
 Run the whole narrated catalog:
 
 ```bash
-python -m mythos.cli all --preset nano   # produces artifacts the demos use
-python -m mythos.cli security --preset nano
+python -m lyceum.cli all --preset nano   # produces artifacts the demos use
+python -m lyceum.cli security --preset nano
 ```
 
 The guiding principle from the AI Platform Security Field Manual runs through
@@ -33,7 +33,7 @@ compromise.
 
 4. **Pickle RCE vs safe load.** A crafted "model" file executes code the instant
    it is unpickled; `torch.load(weights_only=True)` refuses the code path.
-   Mythos checkpoints are tensors-only by construction.
+   Lyceum checkpoints are tensors-only by construction.
 
 5. **Checkpoint integrity.** Weights are signed (HMAC over a content digest).
    Tampering with any tensor makes `verify_checkpoint` fail, and the loader
@@ -61,14 +61,14 @@ audit. No single layer is trusted alone.
 
 ## Red-team suite + ship gate
 
-`python -m mythos.cli eval` scores a capability portfolio and a red-team suite
+`python -m lyceum.cli eval` scores a capability portfolio and a red-team suite
 (each case tagged to MITRE ATLAS) and produces a **ship-gate** decision in which
 **a safety failure blocks release regardless of capability**. This is the
 "evaluation becomes a decision" idea, runnable in CI.
 
 ## Hardening for real use
 
-- Set `MYTHOS_SIGNING_KEY` and `MYTHOS_AUTH_SALT` to real secrets (the dev
+- Set `LYCEUM_SIGNING_KEY` and `LYCEUM_AUTH_SALT` to real secrets (the dev
   defaults are intentionally insecure).
 - Issue per-client API keys with least-privilege scopes via `AuthService.issue_key`.
 - Keep `security.*` toggles on in `config.py`.

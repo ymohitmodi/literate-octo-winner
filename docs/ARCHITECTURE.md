@@ -1,14 +1,14 @@
-# Mythos architecture
+# Lyceum architecture
 
-Mythos is organized around the Frontier manual's **seven-stage lifecycle**, with
+Lyceum is organized around the Frontier manual's **seven-stage lifecycle**, with
 the Security manual's controls woven into every stage and the System Design
 manual's patterns wrapped around serving. The whole thing is one Python package
 driven by one config.
 
 ```
                           ┌─────────────────────────────────────────┐
-                          │            mythos/config.py              │
-                          │  one MythosConfig drives every stage;    │
+                          │            lyceum/config.py              │
+                          │  one LyceumConfig drives every stage;    │
                           │  presets (nano/tiny/small) = scale dial  │
                           └─────────────────────────────────────────┘
    DATA              TOKENIZER         MODEL              TRAIN                INFERENCE
@@ -42,29 +42,36 @@ driven by one config.
 
 | Path | Responsibility |
 |---|---|
-| `mythos/config.py` | the single `MythosConfig`; presets; RAM-based `auto` selection |
-| `mythos/data/tokenizer.py` | from-scratch byte-level BPE |
-| `mythos/data/corpus.py` | offline corpus + SFT + preference + RAG data generation |
-| `mythos/data/curation.py` | dedup, quality filter, **PII scrub**, provenance/digests |
-| `mythos/data/dataset.py` | packed-text, SFT (masked), and preference datasets |
-| `mythos/model/transformer.py` | RMSNorm, RoPE, GQA attention, SwiGLU, MoE, KV cache |
-| `mythos/train/pretrain.py` | next-token training, WSD schedule, spike rollback, MoE aux loss |
-| `mythos/train/sft.py`, `dpo.py` | alignment: SFT then DPO |
-| `mythos/train/checkpoint.py` | signed, integrity-checked, tensors-only checkpoints + AI-BOM |
-| `mythos/inference/engine.py` | KV-cache decode, sampling, streaming, batching, test-time compute |
-| `mythos/memory/context.py` | instruction hierarchy, truncation, history compression |
-| `mythos/memory/rag.py` | vector store, per-tenant retrieval, cite-or-abstain, 4-gate memory |
-| `mythos/security/*` | guardrails, audit, gateway, auth, limits, attacks, demo |
-| `mythos/eval/harness.py` | capability + red-team suites, ship gate, ATLAS tags |
-| `mythos/serving/*` | FastAPI server, runtime (cache/queue/security), metrics |
-| `mythos/agent.py` | ReAct loop over the deterministic gateway |
-| `mythos/cli.py` | the conductor: `data → pretrain → align → eval → security → serve` |
+| `lyceum/config.py` | the single `LyceumConfig`; presets (nano/tiny/small/xl); hardware-aware `auto` selection |
+| `lyceum/hardware.py` | GPU/CPU capability detection; enables AMP/flash/compile/multi-GPU or warns + falls back |
+| `lyceum/inference/quantize.py`, `speculative.py`, `paged_kv.py` | int8 quantization, speculative decoding, paged KV allocator |
+| `lyceum/serving/batching.py` | continuous / in-flight batching scheduler |
+| `lyceum/train/grpo.py`, `reward.py`, `constitutional.py`, `dp_sgd.py`, `distributed.py` | RLVR/GRPO, reward model + PPO-lite, Constitutional AI, DP-SGD, DDP/FSDP + parallelism plan |
+| `lyceum/interpretability/sae.py` | sparse autoencoder + activation steering |
+| `lyceum/eval/scaling_laws.py` | scaling-law ladder + power-law fit |
+| `lyceum/memory/hybrid.py` | hybrid BM25 + vector retrieval (RRF fusion) |
+| `lyceum/data/tokenizer.py` | from-scratch byte-level BPE |
+| `lyceum/data/corpus.py` | offline corpus + SFT + preference + RAG data generation |
+| `lyceum/data/curation.py` | dedup, quality filter, **PII scrub**, provenance/digests |
+| `lyceum/data/dataset.py` | packed-text, SFT (masked), and preference datasets |
+| `lyceum/model/transformer.py` | RMSNorm, RoPE, GQA attention, SwiGLU, MoE, KV cache |
+| `lyceum/train/pretrain.py` | next-token training, WSD schedule, spike rollback, MoE aux loss |
+| `lyceum/train/sft.py`, `dpo.py` | alignment: SFT then DPO |
+| `lyceum/train/checkpoint.py` | signed, integrity-checked, tensors-only checkpoints + AI-BOM |
+| `lyceum/inference/engine.py` | KV-cache decode, sampling, streaming, batching, test-time compute |
+| `lyceum/memory/context.py` | instruction hierarchy, truncation, history compression |
+| `lyceum/memory/rag.py` | vector store, per-tenant retrieval, cite-or-abstain, 4-gate memory |
+| `lyceum/security/*` | guardrails, audit, gateway, auth, limits, attacks, demo |
+| `lyceum/eval/harness.py` | capability + red-team suites, ship gate, ATLAS tags |
+| `lyceum/serving/*` | FastAPI server, runtime (cache/queue/security), metrics |
+| `lyceum/agent.py` | ReAct loop over the deterministic gateway |
+| `lyceum/cli.py` | the conductor: `data → pretrain → align → eval → security → serve` |
 
 ## The flywheel
 
 The Frontier manual frames the lifecycle as a loop, not a line: evaluation
 findings (especially red-team failures) feed back into data and post-training.
-In Mythos this is concrete — `python -m mythos.cli eval` produces a ship-gate
+In Lyceum this is concrete — `python -m lyceum.cli eval` produces a ship-gate
 decision, and a failing red-team case is the signal to add training data or
 tighten a guardrail before re-running the pipeline.
 

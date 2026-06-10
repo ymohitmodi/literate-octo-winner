@@ -5,19 +5,19 @@ suite finishes in well under a minute on a CPU.
 """
 import torch
 
-from mythos.config import get_config, MythosConfig
-from mythos.data.tokenizer import BPETokenizer
-from mythos.data.curation import curate, scrub_pii
-from mythos.data.corpus import build_pretrain_corpus
-from mythos.data.dataset import PackedTextDataset
-from mythos.model.transformer import MythosLM
-from mythos.train.pretrain import pretrain
-from mythos.train.checkpoint import save_checkpoint, verify_checkpoint, load_checkpoint
-from mythos.inference.engine import InferenceEngine
-from mythos.security import guardrails, attacks
-from mythos.security.audit import AuditLog
-from mythos.security.gateway import ToolGateway, Tool, Reversibility
-from mythos.memory.rag import VectorStore, MemoryStore
+from lyceum.config import get_config, LyceumConfig
+from lyceum.data.tokenizer import BPETokenizer
+from lyceum.data.curation import curate, scrub_pii
+from lyceum.data.corpus import build_pretrain_corpus
+from lyceum.data.dataset import PackedTextDataset
+from lyceum.model.transformer import LyceumLM
+from lyceum.train.pretrain import pretrain
+from lyceum.train.checkpoint import save_checkpoint, verify_checkpoint, load_checkpoint
+from lyceum.inference.engine import InferenceEngine
+from lyceum.security import guardrails, attacks
+from lyceum.security.audit import AuditLog
+from lyceum.security.gateway import ToolGateway, Tool, Reversibility
+from lyceum.memory.rag import VectorStore, MemoryStore
 
 
 def _tiny_setup(tmp_path):
@@ -46,7 +46,7 @@ def test_config_scaling():
 def test_train_and_infer(tmp_path):
     cfg, tok, text = _tiny_setup(tmp_path)
     ds = PackedTextDataset.from_text(text, tok, cfg.data.seq_len)
-    model = MythosLM(cfg.model, tok.vocab_size)
+    model = LyceumLM(cfg.model, tok.vocab_size)
     st = pretrain(model, ds, cfg)
     assert st.best_loss < 20
     eng = InferenceEngine(model, tok, cfg)
@@ -59,7 +59,7 @@ def test_train_and_infer(tmp_path):
 
 def test_checkpoint_signing(tmp_path):
     cfg, tok, _ = _tiny_setup(tmp_path)
-    model = MythosLM(cfg.model, tok.vocab_size)
+    model = LyceumLM(cfg.model, tok.vocab_size)
     p = tmp_path / "ckpt.pt"
     save_checkpoint(model, cfg, p)
     assert verify_checkpoint(cfg, p)[0]

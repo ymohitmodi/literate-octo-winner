@@ -1,5 +1,5 @@
 # Optional infrastructure layer — the System Design manual's serving stack,
-# scaled to one machine. NOT required to run Mythos (the CLI runs everything in
+# scaled to one machine. NOT required to run Lyceum (the CLI runs everything in
 # one process); this is here so you can SEE the distributed-serving concepts:
 #
 #   client -> nginx gateway (L7 load balancing across 2 stateless workers)
@@ -7,20 +7,20 @@
 #          -> Prometheus (scrapes /metrics) -> Grafana (dashboards)
 #
 # Usage:
-#   python -m mythos.cli all --preset tiny     # produce ./artifacts first
+#   python -m lyceum.cli all --preset tiny     # produce ./artifacts first
 #   docker compose up --build
 #   curl localhost:8080/healthz
 services:
   worker1:
     build: .
     volumes: ["./artifacts:/app/artifacts:ro"]
-    environment: ["MYTHOS_SIGNING_KEY=change-me", "MYTHOS_AUTH_SALT=change-me"]
+    environment: ["LYCEUM_SIGNING_KEY=change-me", "LYCEUM_AUTH_SALT=change-me"]
     expose: ["8000"]
 
   worker2:
     build: .
     volumes: ["./artifacts:/app/artifacts:ro"]
-    environment: ["MYTHOS_SIGNING_KEY=change-me", "MYTHOS_AUTH_SALT=change-me"]
+    environment: ["LYCEUM_SIGNING_KEY=change-me", "LYCEUM_AUTH_SALT=change-me"]
     expose: ["8000"]
 
   gateway:
