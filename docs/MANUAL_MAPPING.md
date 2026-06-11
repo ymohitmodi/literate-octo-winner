@@ -116,5 +116,37 @@ demonstrated as a mock or documented.
 | Canary / shadow deploys, autoscaling | — | doc |
 | Consistent hashing, CDC/outbox, sagas | — | doc |
 
-If you want to extend Lyceum, the `doc`-only rows are the natural next exercises
-— each manual section above tells you exactly what the production version adds.
+## D. State-of-the-art retrofit (deep end-to-end pass)
+
+A second pass ported the remaining frontier-model features that a system like
+"Mythos"/Claude has end-to-end. All run on CPU at tiny scale and accelerate on a
+GPU; most are auto-enabled in the larger presets.
+
+| Concept | Where in Lyceum | Fidelity |
+|---|---|---|
+| Native **multimodality** (vision → shared token space) | `multimodal/vision.py` (`cli multimodal`) | real (toy) |
+| **Long-context** RoPE scaling (NTK/position interpolation) | `model/transformer.precompute_rope` (`rope_scaling`) | real |
+| **Multi-token prediction** heads (DeepSeek-style) | `model/transformer.LyceumLM` (`mtp_tokens`) | real |
+| **Sliding-window** (local) attention | `model/transformer.Attention` (`sliding_window`) | real |
+| **QK-norm** + **z-loss** stability | `model/transformer` (`qk_norm`, `z_loss`) | real |
+| **Muon** optimizer (Newton-Schulz orthogonalized) | `train/muon.py` (`train.optimizer="muon"`) | real |
+| **EMA** weight averaging | `train/muon.EMA` (`train.ema_decay`) | real |
+| **Distillation** (teacher→student, KD) | `train/distill.py` (`cli distill`) | real |
+| **MinHash + LSH** near-dedup | `data/dedup.py` | real |
+| Eval-set **decontamination** (n-gram overlap) | `data/decontaminate.py` | real |
+| **Constrained / structured (JSON) decoding** | `inference/constrained.py` | real |
+| **Prefix caching** (shared system-prompt KV) | `inference/prefix_cache.py` | real |
+| Model-driven **function calling** + ReAct | `agent_tools.py` (`cli tools`) | real |
+| **Constitutional classifiers** (trained safety) | `safety/classifiers.py` | real (toy) |
+| **Deliberative alignment** (reason-before-answer) | `safety/deliberative.py` | real (toy) |
+| **LLM-as-judge** (position-bias swap) | `eval/judge.py` | real |
+| **Tree-of-thought** + process reward search | `inference/search.py` | real (toy) |
+
+What still requires a real cluster (and is therefore simulated/documented, not
+faked): genuine multi-node N-D parallelism beyond single-host DDP/FSDP,
+datacenter interconnect/topology, prefill-decode disaggregation, and TEE/
+confidential-compute weight protection. These are described in
+`train/distributed.py` and the docs rather than pretended.
+
+If you want to extend Lyceum further, the remaining `doc`/`simulated` rows above
+are the natural next exercises.

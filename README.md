@@ -156,7 +156,28 @@ on a GPU:
 python -m lyceum.cli grpo       # RLVR reasoning with GRPO on a verifiable task
 python -m lyceum.cli interpret  # train a sparse autoencoder + activation steering
 python -m lyceum.cli scaling    # train a ladder of models and fit a scaling law
+python -m lyceum.cli multimodal # train a tiny vision+language model
+python -m lyceum.cli distill    # distill the model into a smaller student
+python -m lyceum.cli tools      # model-driven function calling via the gateway
 ```
+
+### State-of-the-art retrofit
+
+A deep end-to-end pass added the remaining frontier-model features (all CPU-able,
+GPU-accelerated, documented in `docs/MANUAL_MAPPING.md` section D):
+
+- **Modeling:** native multimodality (vision), long-context RoPE scaling,
+  multi-token prediction, sliding-window attention, QK-norm + z-loss, the
+  **Muon** optimizer, and EMA weight averaging (`model/transformer.py`,
+  `train/muon.py`; enabled in the `small`/`xl` presets).
+- **Data:** MinHash/LSH near-dedup (`data/dedup.py`), eval-set decontamination
+  (`data/decontaminate.py`), distillation (`train/distill.py`).
+- **Inference:** constrained/structured JSON decoding (`inference/constrained.py`),
+  prefix caching (`inference/prefix_cache.py`), function-calling agent
+  (`agent_tools.py`).
+- **Alignment/safety/eval:** constitutional classifiers (`safety/classifiers.py`),
+  deliberative alignment (`safety/deliberative.py`), LLM-as-judge
+  (`eval/judge.py`), tree-of-thought + process reward (`inference/search.py`).
 
 Plus, as importable modules wired into config/serving: int8 **quantization**
 (`inference/quantize.py`), **speculative decoding** (`inference/speculative.py`),

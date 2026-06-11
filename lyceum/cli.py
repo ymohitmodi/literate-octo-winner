@@ -251,6 +251,82 @@ def cmd_scaling(args):
     run_scaling_demo()
 
 
+def cmd_multimodal(args):
+    """Train a tiny vision+language model on a bright/dark image task."""
+    from .config import get_config
+    from .data.tokenizer import BPETokenizer
+    from .model.transformer import LyceumLM
+    from .multimodal.vision import (_build_nano_mm, build_vision_dataset,
+                                    train_multimodal, evaluate)
+    cfg = _load_cfg(args)
+    tok = BPETokenizer.load(ART / "tokenizer.json") if (ART / "tokenizer.json").exists() \
+        else _quick_tokenizer(cfg)
+    mm = _build_nano_mm(tok)
+    ds = build_vision_dataset(200)
+    train_multimodal(mm, ds, tok, steps=args.max_steps or 60)
+    acc = evaluate(mm, build_vision_dataset(40), tok)
+    print(f"[multimodal] bright/dark accuracy: {acc:.2f}")
+
+
+def cmd_distill(args):
+    """Distill the trained model into a smaller student."""
+    from .data.tokenizer import BPETokenizer
+    from .data.dataset import PackedTextDataset
+    from .model.transformer import LyceumLM
+    from .config import ModelConfig
+    from .train.checkpoint import load_checkpoint
+    from .train.distill import distill
+    cfg = _load_cfg(args)
+    tok = BPETokenizer.load(ART / "tokenizer.json")
+    teacher = LyceumLM(cfg.model, tok.vocab_size)
+    ckpt = ART / "ckpt_aligned.pt" if (ART / "ckpt_aligned.pt").exists() else ART / "ckpt_pretrain.pt"
+    if ckpt.exists():
+        load_checkpoint(teacher, cfg, ckpt)
+    student_cfg = ModelConfig(dim=max(64, cfg.model.dim // 2),
+                              n_layers=max(2, cfg.model.n_layers // 2),
+                              n_heads=cfg.model.n_heads, n_kv_heads=cfg.model.n_kv_heads,
+                              max_seq_len=cfg.model.max_seq_len)
+    student = LyceumLM(student_cfg, tok.vocab_size)
+    text = (ART / "corpus.txt").read_text()
+    ds = PackedTextDataset.from_text(text, tok, cfg.data.seq_len)
+    print(f"[distill] teacher={teacher.num_params():,} -> student={student.num_params():,}")
+    st = distill(teacher, student, ds, tok, cfg, steps=args.max_steps or 200)
+    print(f"[distill] done; final loss {st.losses()[-1]:.3f}")
+
+
+def cmd_tools(args):
+    """Model-driven function calling forced through the deterministic gateway."""
+    from .data.tokenizer import BPETokenizer
+    from .agent_tools import FunctionCallingAgent
+    from .security.gateway import ToolGateway, Tool, Reversibility
+    from .security.audit import AuditLog
+    cfg = _load_cfg(args)
+    eng, _ = _engine(cfg)
+    import re
+    def safe_calc(expression: str) -> str:
+        if not re.fullmatch(r"[0-9+\-*/(). ]+", expression or ""):
+            return f"error: not a numeric expression: {expression!r}"
+        return str(eval(expression, {"__builtins__": {}}, {}))
+    gw = ToolGateway(AuditLog(ART / "tools_audit.log"), action_budget=4)
+    gw.register(Tool("calculator", safe_calc,
+                     Reversibility.REVERSIBLE, {"expression": str}))
+    agent = FunctionCallingAgent(eng, gw)
+    out = agent.run("compute 2+2") if hasattr(agent, "run") else agent.propose_and_execute("compute 2+2")
+    print("[tools] result:", out)
+
+
+def _quick_tokenizer(cfg):
+    from .data.corpus import build_pretrain_corpus
+    from .data.curation import curate
+    from .data.tokenizer import BPETokenizer
+    raw = build_pretrain_corpus(ART / "corpus_raw.txt", n_docs=800).read_text()
+    text, _ = curate(raw)
+    tok = BPETokenizer(cfg.tokenizer.special_tokens)
+    tok.train(text, cfg.tokenizer.vocab_size)
+    tok.save(ART / "tokenizer.json")
+    return tok
+
+
 def cmd_all(args):
     print("=" * 64)
     print("LYCEUM end-to-end pipeline:", args.preset)
@@ -278,7 +354,8 @@ def main(argv=None):
                      ("agent", cmd_agent), ("serve", cmd_serve),
                      ("doctor", cmd_doctor), ("grpo", cmd_grpo),
                      ("interpret", cmd_interpret), ("scaling", cmd_scaling),
-                     ("all", cmd_all)]:
+                     ("multimodal", cmd_multimodal), ("distill", cmd_distill),
+                     ("tools", cmd_tools), ("all", cmd_all)]:
         sp = sub.add_parser(name, help=fn.__doc__)
         sp.add_argument("--preset", default="auto")
         sp.add_argument("--max-steps", type=int, default=None, dest="max_steps")

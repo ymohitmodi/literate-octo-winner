@@ -96,8 +96,24 @@ def pretrain(
 
     loader = DataLoader(dataset, batch_size=t.batch_size, shuffle=True,
                         drop_last=True)
-    opt = torch.optim.AdamW(model.parameters(), lr=t.lr, betas=(0.9, 0.95),
-                            weight_decay=t.weight_decay)
+    # optimizer: AdamW by default, or the Muon hybrid (Muon on 2D matrices +
+    # AdamW on embeddings/head/norms). EMA weight averaging optional.
+    ema = None
+    if t.optimizer == "muon":
+        from .muon import build_muon_adamw, EMA
+        muon, adamw = build_muon_adamw(model, weight_decay=t.weight_decay)
+        optimizers = [o for o in (muon, adamw) if o is not None]
+        if t.ema_decay > 0:
+            ema = EMA(base_model, t.ema_decay)
+    else:
+        optimizers = [torch.optim.AdamW(model.parameters(), lr=t.lr,
+                      betas=(0.9, 0.95), weight_decay=t.weight_decay)]
+        if t.ema_decay > 0:
+            from .muon import EMA
+            ema = EMA(base_model, t.ema_decay)
+    for o in optimizers:
+        for g in o.param_groups:
+            g["_base_lr"] = g["lr"]
 
     n_params = base_model.num_params()
     state = TrainState()
@@ -115,10 +131,13 @@ def pretrain(
     t0 = time.time()
     for step in range(t.max_steps):
         lr = wsd_lr(step, cfg)
-        for g in opt.param_groups:
-            g["lr"] = lr
+        factor = lr / t.lr if t.lr else 1.0   # scale every group's base lr
+        for o in optimizers:
+            for g in o.param_groups:
+                g["lr"] = g["_base_lr"] * factor
 
-        opt.zero_grad(set_to_none=True)
+        for o in optimizers:
+            o.zero_grad(set_to_none=True)
         total = 0.0
         for _ in range(t.grad_accum_steps):
             x, y = next(it)
@@ -130,7 +149,9 @@ def pretrain(
             scaler.scale(loss_full / t.grad_accum_steps).backward()
             total += loss.item() / t.grad_accum_steps
 
-        scaler.unscale_(opt)
+        if use_scaler:
+            for o in optimizers:
+                scaler.unscale_(o)
         gnorm = torch.nn.utils.clip_grad_norm_(model.parameters(), t.grad_clip)
 
         # --- loss-spike playbook -------------------------------------------
@@ -140,13 +161,21 @@ def pretrain(
             # roll back to the last verified checkpoint instead of diverging.
             from .checkpoint import load_checkpoint
             load_checkpoint(base_model, cfg, last_good_ckpt)
-            opt.zero_grad(set_to_none=True)
+            for o in optimizers:
+                o.zero_grad(set_to_none=True)
             scaler.update()                 # keep AMP scaler state consistent
             _record(state, step, total, gnorm, lr, tokens_per_step, t0,
                     note="SPIKE->rollback", log_path=log_path, on_log=on_log)
             continue
-        scaler.step(opt)
-        scaler.update()
+        if use_scaler:
+            for o in optimizers:
+                scaler.step(o)
+            scaler.update()
+        else:
+            for o in optimizers:
+                o.step()
+        if ema is not None:
+            ema.update(base_model)
         prev_loss = total
         state.step = step
 
@@ -159,6 +188,9 @@ def pretrain(
                                    extra={"loss": total})
             last_good_ckpt = info.path
 
+    if ema is not None:
+        # serve/evaluate the averaged weights (usually a small quality win)
+        ema.copy_to(base_model)
     if ckpt_path:
         info = save_checkpoint(base_model, cfg, ckpt_path, step=t.max_steps, bom=bom,
                                extra={"loss": prev_loss})

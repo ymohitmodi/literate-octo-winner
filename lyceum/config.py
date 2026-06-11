@@ -57,6 +57,13 @@ class ModelConfig:
     n_experts: int = 1
     n_experts_active: int = 1
     moe_layers: list[int] = field(default_factory=list)
+    # --- newer frontier-model refinements (all default-off so small presets
+    #     are unchanged; turned on in the bigger presets / by config) ---
+    sliding_window: int = 0       # >0: local windowed attention (long-context)
+    qk_norm: bool = False         # RMSNorm on Q/K before attention (stability)
+    z_loss: float = 0.0           # router/logit z-loss coefficient (stability)
+    rope_scaling: float = 1.0     # >1: stretch RoPE for context extension (NTK)
+    mtp_tokens: int = 1           # >1: multi-token prediction heads (extra depth)
 
 
 @dataclass
@@ -90,6 +97,8 @@ class TrainConfig:
     compile: bool = False         # torch.compile (auto-gated to GPU)
     amp: bool = True              # mixed precision (auto-gated by hardware)
     distributed: bool = False     # DDP/FSDP across multiple GPUs (auto-gated)
+    optimizer: str = "adamw"      # "adamw" | "muon" (Muon on 2D matrices)
+    ema_decay: float = 0.0        # >0 enables EMA weight averaging
 
 
 @dataclass
@@ -248,7 +257,7 @@ def _preset_small() -> LyceumConfig:
     c.tokenizer.vocab_size = 8192
     c.model = ModelConfig(dim=384, n_layers=8, n_heads=12, n_kv_heads=4,
                           max_seq_len=1024, n_experts=4, n_experts_active=1,
-                          moe_layers=[3, 5])
+                          moe_layers=[3, 5], qk_norm=True, z_loss=1e-4)
     c.data.seq_len = 1024
     c.train.max_steps = 6000
     c.train.batch_size = 8
@@ -268,7 +277,8 @@ def _preset_xl() -> LyceumConfig:
     c.tokenizer.vocab_size = 16384
     c.model = ModelConfig(dim=768, n_layers=12, n_heads=12, n_kv_heads=4,
                           max_seq_len=2048, n_experts=8, n_experts_active=2,
-                          moe_layers=[4, 6, 8])
+                          moe_layers=[4, 6, 8], qk_norm=True, z_loss=1e-4,
+                          sliding_window=512, mtp_tokens=2)
     c.data.seq_len = 2048
     c.train.max_steps = 20000
     c.train.batch_size = 16
@@ -276,6 +286,8 @@ def _preset_xl() -> LyceumConfig:
     c.train.grad_checkpoint = True
     c.train.compile = True
     c.train.distributed = True
+    c.train.optimizer = "muon"
+    c.train.ema_decay = 0.999
     c.align.sft_steps = 4000
     c.align.dpo_steps = 2000
     c.inference.quantize = True

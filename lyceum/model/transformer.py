@@ -26,9 +26,15 @@ from ..config import ModelConfig
 # --------------------------------------------------------------------------- #
 # Rotary positional embeddings
 # --------------------------------------------------------------------------- #
-def precompute_rope(head_dim: int, max_seq_len: int, theta: float, device=None):
+def precompute_rope(head_dim: int, max_seq_len: int, theta: float, device=None,
+                    scaling: float = 1.0):
+    # NTK/linear position-interpolation: dividing positions by `scaling`
+    # stretches the learned range so the model extrapolates to a longer context
+    # than it was trained on (RoPE scaling / context extension).
     inv_freq = 1.0 / (theta ** (torch.arange(0, head_dim, 2, device=device).float() / head_dim))
     t = torch.arange(max_seq_len, device=device).float()
+    if scaling and scaling != 1.0:
+        t = t / float(scaling)
     freqs = torch.outer(t, inv_freq)               # (T, head_dim/2)
     return torch.cos(freqs), torch.sin(freqs)
 
@@ -70,12 +76,23 @@ class Attention(nn.Module):
         self.wv = nn.Linear(cfg.dim, self.n_kv_heads * self.head_dim, bias=False)
         self.wo = nn.Linear(self.n_heads * self.head_dim, cfg.dim, bias=False)
         self.dropout = cfg.dropout
+        self.sliding_window = getattr(cfg, "sliding_window", 0)
+        # QK-norm: RMSNorm on per-head query/key vectors stabilizes attention
+        # logits in deep/large models (a frontier "dark art").
+        self.qk_norm = getattr(cfg, "qk_norm", False)
+        if self.qk_norm:
+            self.q_norm = RMSNorm(self.head_dim, cfg.norm_eps)
+            self.k_norm = RMSNorm(self.head_dim, cfg.norm_eps)
 
     def forward(self, x, cos, sin, cache=None, layer_idx=0):
         B, T, _ = x.shape
         q = self.wq(x).view(B, T, self.n_heads, self.head_dim)
         k = self.wk(x).view(B, T, self.n_kv_heads, self.head_dim)
         v = self.wv(x).view(B, T, self.n_kv_heads, self.head_dim)
+
+        if self.qk_norm:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
 
         q = apply_rope(q, cos, sin)
         k = apply_rope(k, cos, sin)
@@ -91,8 +108,19 @@ class Attention(nn.Module):
         q, k, v = (t.transpose(1, 2) for t in (q, k, v))
         # causal mask only needed when not incrementally decoding a single token
         is_causal = cache is None or T > 1
+        attn_mask = None
+        if self.sliding_window and self.sliding_window > 0 and is_causal and T > 1:
+            # local attention: each query attends only to the last `window`
+            # keys (breaks the quadratic cost; long-context building block).
+            Tk = k.size(2)
+            qi = torch.arange(T, device=x.device).unsqueeze(1) + (Tk - T)
+            ki = torch.arange(Tk, device=x.device).unsqueeze(0)
+            causal = ki <= qi
+            local = ki > (qi - self.sliding_window)
+            attn_mask = (causal & local)
+            is_causal = False
         out = F.scaled_dot_product_attention(
-            q, k, v, is_causal=is_causal,
+            q, k, v, attn_mask=attn_mask, is_causal=is_causal,
             dropout_p=self.dropout if self.training else 0.0,
         )
         out = out.transpose(1, 2).contiguous().view(B, T, -1)
@@ -200,8 +228,19 @@ class LyceumLM(nn.Module):
         if cfg.tie_embeddings:
             self.lm_head.weight = self.tok_emb.weight
 
+        # Multi-token prediction (MTP): extra heads that predict t+2, t+3, ...
+        # in parallel. Improves sample efficiency and doubles as a built-in
+        # speculative-decoding drafter (DeepSeek-V3 style). mtp_tokens=1 -> off.
+        self.mtp_tokens = max(1, getattr(cfg, "mtp_tokens", 1))
+        self.z_loss = getattr(cfg, "z_loss", 0.0)
+        if self.mtp_tokens > 1:
+            self.mtp_heads = nn.ModuleList(
+                [nn.Linear(cfg.dim, vocab_size, bias=False)
+                 for _ in range(self.mtp_tokens - 1)])
+
         head_dim = cfg.dim // cfg.n_heads
-        cos, sin = precompute_rope(head_dim, cfg.max_seq_len, cfg.rope_theta)
+        cos, sin = precompute_rope(head_dim, cfg.max_seq_len, cfg.rope_theta,
+                                   scaling=getattr(cfg, "rope_scaling", 1.0))
         self.register_buffer("rope_cos", cos, persistent=False)
         self.register_buffer("rope_sin", sin, persistent=False)
         self.apply(self._init_weights)
@@ -237,6 +276,20 @@ class LyceumLM(nn.Module):
             loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)), targets.view(-1),
                 ignore_index=-100)
+            # z-loss: penalize large logit norms (log-sum-exp) for stability,
+            # discouraging the runaway logits behind many loss spikes.
+            if self.z_loss:
+                lse = torch.logsumexp(logits.view(-1, logits.size(-1)), dim=-1)
+                loss = loss + self.z_loss * (lse ** 2).mean()
+            # multi-token prediction auxiliary losses (predict t+2, t+3, ...)
+            if self.mtp_tokens > 1:
+                for j, head in enumerate(self.mtp_heads, start=2):
+                    if T > j:
+                        mlogits = head(x[:, :-(j - 1), :])
+                        mtargets = targets[:, (j - 1):]
+                        loss = loss + 0.1 * F.cross_entropy(
+                            mlogits.reshape(-1, mlogits.size(-1)),
+                            mtargets.reshape(-1), ignore_index=-100)
             return logits, loss
         # inference: only need logits for the last position
         logits = self.lm_head(x[:, [-1], :])
