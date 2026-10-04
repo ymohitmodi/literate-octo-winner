@@ -7,8 +7,9 @@ GPU). It is a teaching system: every component is the *same mechanism* a
 frontier lab uses, just parameterized small, so you can read the code, run it,
 attack it, and defend it.
 
-It is built directly from three field manuals and maps each feature back to
-them (see [`docs/MANUAL_MAPPING.md`](docs/MANUAL_MAPPING.md)):
+It follows the structure of three reference field manuals (not included in this
+repository) and maps each feature back to them (see
+[`docs/MANUAL_MAPPING.md`](docs/MANUAL_MAPPING.md)):
 
 1. **The Frontier Model Field Manual** — how near-human models are built from scratch.
 2. **The AI Platform Security Field Manual** — lifecycle attacks & defenses.
@@ -27,6 +28,17 @@ them (see [`docs/MANUAL_MAPPING.md`](docs/MANUAL_MAPPING.md)):
 > [`DISCLAIMER.md`](DISCLAIMER.md).
 
 ---
+
+## At a glance
+
+| | |
+|---|---|
+| **Purpose** | Learn — by reading, running, attacking and defending — how a modern LLM is built, aligned, served, secured and operated, at a scale one CPU can handle. |
+| **Prerequisites** | Python 3.10+, ~10–16 GB RAM, a few GB of disk. **No GPU required** (CUDA / Apple MPS are used automatically when present). No paid services or API keys. |
+| **Install** | `python -m venv .venv`, activate it (`.venv\Scripts\Activate.ps1` on Windows, `source .venv/bin/activate` on macOS / Linux), then follow *Hardware & install* below. |
+| **Run** | `python -m lyceum.cli doctor` → `python -m lyceum.cli all --preset nano` (see *Quickstart*) · tests: `python -m pytest tests -q` |
+| **Benefits** | Every stage is readable, small and testable; security controls (PII scrubbing, signed checkpoints, provenance, audit chain, safe model loading) are built in rather than bolted on. |
+| **Status** | Educational reference implementation (v0.1). It makes no claim to match any real frontier system — see [`DISCLAIMER.md`](DISCLAIMER.md) and *What is real vs simulated*. |
 
 ## What it demonstrates, end to end
 
@@ -200,4 +212,4 @@ you. Each item is labeled in `docs/MANUAL_MAPPING.md`.
 
 ## License
 
-Educational project. Use freely for learning AI systems and AI security.
+MIT — see [`LICENSE`](LICENSE). Educational project: use freely for learning AI systems and AI security.
