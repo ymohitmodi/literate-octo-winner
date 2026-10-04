@@ -93,7 +93,10 @@ def _sample_completion(policy: LyceumLM, prompt_ids: list[int], tok: BPETokenize
                 nxt = int(logits.argmax())
             else:
                 probs = F.softmax(logits / temperature, dim=-1)
-                nxt = int(torch.multinomial(probs, 1, generator=rng))
+                # `rng` is a CPU torch.Generator, which PyTorch requires to live on the same
+                # device as the tensor it samples from. Sampling on CPU keeps the seeded
+                # run reproducible across CPU / CUDA / Apple-MPS (probs is only vocab-sized).
+                nxt = int(torch.multinomial(probs.float().cpu(), 1, generator=rng))
             if nxt == eos:
                 break
             ids.append(nxt)
